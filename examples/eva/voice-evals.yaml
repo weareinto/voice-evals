@@ -1,0 +1,159 @@
+# voice-evals config for EVA (LDL voice evaluation agent).
+# Copy to the root of weareinto/ldl-voice-eval-agent with voice-evals.state.json, rubric.md and evals/.
+# Mirrors what is live in LangSmith since 24 Nov 2026 (evaluators + alerts B1-B16).
+
+agent: eva
+
+langsmith:
+  workspace_id: 45a85d80-8b0f-44f1-b8ef-333cdfdf73b8
+  project: Eval-Agent-Production
+  project_id: f1fef952-a83c-47fc-9d8c-7b95fe7f5fb1
+
+sessions:
+  root_name: LDL Voice Evaluation Session
+  link_key: session_id          # the post-call scoring run carries the same session_id
+
+slack:
+  webhook_env: VOICE_EVALS_SLACK_WEBHOOK
+  alerts_channel:               # #ldl-monitoring
+    team_id: T04T5JQDA3G
+    channel_id: C0CM5TD0ZFA
+
+evaluators:
+  - name: Voice session metrics
+    code: builtin:session_metrics
+    root_name: LDL Voice Evaluation Session
+    extend_retention: true       # as set today (180-day retention, billed); decide whether to keep it
+  - name: Scoring output checks
+    code: builtin:scoring_checks
+    root_name: skills_validation_evaluation_agent
+    filter: "is_root:true"
+    trace_filter: 'name:"skills_validation_evaluation_agent"'
+    backfill_days: 14
+
+alerts:
+  - code: B1
+    name: B1 Slow replies
+    description: "Q2 Response latency: a turn where the agent took more than 5 s to reply (turn metadata user_bot_latency_seconds > 5). Fires on any such turn in the last 60 min."
+    attribute: run_count
+    aggregation: sum
+    filter: and(eq(name, "turn"), and(eq(metadata_key, "otel.span.turn.user_bot_latency_seconds"), gt(metadata_value, 5)))
+    operator: gte
+    threshold: 1
+  - code: B2
+    name: B2 Slow start
+    description: "Q2 Response latency: agent's first words came more than 10 s after the session started. Needs feedback key first_words_latency_seconds (seconds) on each session."
+    key: first_words_latency_seconds     # no data yet: the learner's join time is not traced
+    operator: gt
+    threshold: 10
+  - code: B3
+    name: B3 Agent didn't answer
+    description: "Eva started speaking 8+ seconds after the learner's last word in 5 or more turns of a session (from the timed transcript)."
+    key: agent_silence_turns
+    operator: gte
+    threshold: 5
+  - code: B4
+    name: B4 Learner had to speak again
+    description: "Q2 User repeats themselves: learner had to repeat themselves 5 or more times. Needs feedback key user_repeat_count (count) on each session."
+    key: user_repeat_count
+    operator: gte
+    threshold: 5
+  - code: B5
+    name: B5 Agent cut the learner off
+    description: "Q2 False barge-in: agent cut the learner off 5 or more times. Needs feedback key false_barge_in_count (count) on each session."
+    key: false_barge_in_count
+    operator: gte
+    threshold: 5
+  - code: B6
+    name: B6 Agent repeated itself
+    description: "Q2 Repetition loop: agent repeated itself (same question or content again) 3 or more times. Needs feedback key agent_repetition_loop_count (count) on each session."
+    key: agent_repetition_loop_count
+    operator: gte
+    threshold: 3
+  - code: B7
+    name: B7 Learner asked to repeat
+    description: "Q2 Repetition loop: learner asked the agent to repeat 4 or more times. Needs feedback key learner_repeat_request_count (count) on each session."
+    key: learner_repeat_request_count
+    operator: gte
+    threshold: 4
+  - code: B8
+    name: B8 Learner barely spoke
+    description: "Q2 Agent talk share: learner had less than 35% of the talk time. Needs feedback key learner_talk_share_pct (0-100) on each session."
+    key: learner_talk_share_pct
+    operator: lt
+    threshold: 35
+  - code: B9
+    name: B9 Several questions at once
+    description: "Q2 Two questions at once: agent asked two or more questions in over 25% of its turns. Needs feedback key two_questions_turn_pct (0-100) on each session."
+    key: two_questions_turn_pct
+    operator: gt
+    threshold: 25
+  - code: B10
+    name: B10 Wrong language
+    description: "Q2 Wrong language: agent spoke the wrong language in 4 or more turns. Needs feedback key wrong_language_turns (count) on each session."
+    key: wrong_language_turns
+    operator: gte
+    threshold: 4
+  - code: B11
+    name: B11 Symbols read aloud
+    description: "Q2 Internal text spoken: agent read symbols, markup or internal text aloud at least once. Needs feedback key internal_text_spoken_count (count) on each session."
+    key: internal_text_spoken_count
+    operator: gte
+    threshold: 1
+  - code: B12
+    name: B12 Sentence spoken twice
+    description: "Q6 Duplicated or garbled speech: the learner heard the same sentence twice in a turn 3 or more times. Uses feedback key self_repetition_turns (count of turns)."
+    key: self_repetition_turns
+    operator: gte
+    threshold: 3
+  - code: B13
+    name: B13 Notions not assessed
+    description: "Q3 Coverage without redundancy: less than 60% of the level's notions were covered. Needs feedback key notion_coverage_pct (0-100) on each session."
+    key: notion_coverage_pct
+    operator: lt
+    threshold: 60
+  - code: B14
+    name: B14 Evaluation errors
+    description: "2 or more problems in a scoring result: unreadable output, missing competency score, a quote not found in the transcript, or a level/score shown to the learner."
+    key: evaluation_errors_count
+    operator: gte
+    threshold: 2
+  - code: B15
+    name: B15 Result delayed
+    description: "Q1 Result delivery delay: result delivered more than 60 min after the session ended. Needs feedback key result_delivery_delay_minutes (minutes) on each session."
+    key: result_delivery_delay_minutes
+    operator: gt
+    threshold: 60
+  - code: B16
+    name: B16 Unusually costly session
+    description: "Q1 Cost per session: LLM cost in the last 60 min above $0.49, i.e. 3x the current median session cost (~$0.16, Nov 2026). Update the threshold if the median moves."
+    attribute: total_cost
+    aggregation: sum
+    filter: ""
+    operator: gt
+    threshold: 0.49
+
+release:
+  dataset: Eva next-reply turns          # 40 real moments from production sessions
+  target: evals/target.py:generate
+  settings:
+    model: gemini-3.6-flash
+    thinking_level: low
+  checks: [builtin:reply_checks, evals/checks.py]
+  judge:
+    provider: anthropic
+    model: claude-haiku-5-5
+    rubric: rubric.md
+  gate:
+    marker_valid: ">= 1.0"
+    turn_decision_matches_production: ">= 0.85"
+    clean_for_speech: ">= 0.98"
+    one_question: ">= 0.95"
+    no_correction: ">= 0.98"
+    judge_quality_1_5: ">= 3.4"
+    time_to_first_token_s_p95: "<= 3.5"
+  regression_tolerance: 0.05
+  max_concurrency: 2
+
+datasets:
+  cases: Eva voice sessions - production

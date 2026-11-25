@@ -1,0 +1,44 @@
+# Release gate: on pull requests that touch the agent's prompt/config, replay the test dataset
+# through the PR's version, check the gate, post the verdict. A FAIL fails the check.
+name: voice-evals release gate
+
+on:
+  pull_request:
+    paths:
+      - "prompts/**"          # adapt to where the agent's prompt and settings live
+      - "voice-evals.yaml"
+      - "evals/**"
+  workflow_dispatch:
+    inputs:
+      name:
+        description: "Candidate name"
+        required: true
+      settings:
+        description: "Space-separated key=value candidate settings"
+        default: ""
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install voice-evals and the agent's eval deps
+        run: |
+          pip install -q "voice-evals[gemini] @ git+https://github.com/weareinto/voice-evals@v0.1.0#subdirectory=cli"
+          if [ -f evals/requirements.txt ]; then pip install -q -r evals/requirements.txt; fi
+      - name: Run the gate
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          VOICE_EVALS_SLACK_WEBHOOK: ${{ secrets.VOICE_EVALS_SLACK_WEBHOOK }}
+          NAME: ${{ github.event.inputs.name || format('pr{0}', github.event.pull_request.number) }}
+          SETTINGS: ${{ github.event.inputs.settings }}
+        run: |
+          ARGS=()
+          for kv in $SETTINGS; do ARGS+=(--set "$kv"); done
+          voice-evals release --name "$NAME" "${ARGS[@]}" --explain 3 --slack

@@ -1,0 +1,76 @@
+# voice-evals config for one voice agent. Lives at the root of the agent's repo.
+# `voice-evals setup` pushes the evaluators and alerts below to LangSmith;
+# `report`, `triage` and `release` read the same file.
+
+agent: __AGENT__
+
+langsmith:
+  workspace_id: TODO-workspace-uuid      # LangSmith > Settings > Workspace ID
+  project: TODO-project-name             # tracing project the agent writes to
+  project_id: TODO-project-uuid          # optional, looked up from the name if removed
+
+sessions:
+  root_name: TODO-root-run-name          # name of the root run that is one call/session
+  link_key: session_id                   # metadata key linking other root runs (e.g. post-call scoring) to the session
+
+slack:
+  webhook_env: VOICE_EVALS_SLACK_WEBHOOK # incoming-webhook URL for digests, release verdicts, write-ups
+  alerts_channel:                        # LangSmith's own Slack app posts the instant alerts here
+    team_id: TODO-slack-team-id
+    channel_id: TODO-slack-channel-id
+
+# Online evaluators: code that LangSmith runs on every new matching run, writing one score per key.
+# builtin:session_metrics expects the transcript format described at the top of
+# checks/session_metrics.py; copy and adapt it (code: checks/my_metrics.py) for another format.
+evaluators:
+  - name: Voice session metrics
+    code: builtin:session_metrics
+    root_name: TODO-root-run-name        # runs on root runs with this name
+    sampling_rate: 1.0
+    backfill_days: 7                     # on create only: also score the last 7 days
+    extend_retention: false              # true keeps scored traces 180 days (billed by LangSmith)
+
+# Alerts: `key` = average of that feedback key over the window (one score per session).
+# Other forms: attribute run_count / total_cost / latency with a LangSmith filter.
+alerts:
+  - code: A1
+    name: A1 Learner barely spoke
+    key: learner_talk_share_pct
+    operator: lt
+    threshold: 35
+  - code: A2
+    name: A2 Symbols read aloud
+    key: internal_text_spoken_count
+    operator: gte
+    threshold: 1
+  - code: A3
+    name: A3 Agent repeated itself
+    key: agent_repetition_loop_count
+    operator: gte
+    threshold: 3
+  - code: A4
+    name: A4 Several questions at once
+    key: two_questions_turn_pct
+    operator: gt
+    threshold: 25
+
+# Release gate: replay `dataset` through `target` with the candidate settings and score each reply.
+release:
+  dataset: TODO-dataset-name
+  target: evals/target.py:generate       # def generate(inputs: dict, settings: dict) -> {"text": ..., "ttft": s, "total": s}
+  settings: {}                           # defaults; override per run with --set key=value
+  checks: [builtin:reply_checks]         # add your own: evals/checks.py (def check_reply(inputs, outputs, reference_outputs))
+  judge:
+    provider: anthropic                  # or gemini
+    model: claude-haiku-5-5
+    rubric: rubric.md
+  gate:                                  # <key>[_p50|_p95]: "<op> <number>"
+    clean_for_speech: ">= 1.0"
+    one_question: ">= 0.95"
+    judge_quality_1_5: ">= 3.5"
+    time_to_first_token_s_p95: "<= 3.0"
+  regression_tolerance: 0.05             # with --baseline: fail if a gated mean is 5% worse
+  max_concurrency: 2
+
+datasets:
+  cases: TODO-dataset-name               # where `add-case` keeps sessions found in triage

@@ -1,0 +1,8 @@
+{
+  "name": "voice-evals",
+  "displayName": "Voice Evals",
+  "version": "0.1.0",
+  "description": "Evaluate voice agents with LangSmith and alert in Slack: set up evaluators and alerts, gate releases, triage failing sessions, weekly review. Scripts do the work; Claude reads short summaries.",
+  "author": { "name": "weareinto" },
+  "keywords": ["evals", "langsmith", "slack", "voice-agents"]
+}

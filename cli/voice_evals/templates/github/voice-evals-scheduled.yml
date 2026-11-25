@@ -1,0 +1,40 @@
+# Daily digest (every morning) and weekly review (Mondays) posted to Slack.
+# No Claude involved: the CLI computes everything and posts by webhook.
+name: voice-evals scheduled
+
+on:
+  schedule:
+    - cron: "0 7 * * *"        # 07:00 UTC every day
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Window in days"
+        default: "1"
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install voice-evals
+        # Pin to a tag of the plugin repo so the checks don't change under you.
+        run: pip install -q "voice-evals @ git+https://github.com/weareinto/voice-evals@v0.1.0#subdirectory=cli"
+      - name: Daily digest
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          VOICE_EVALS_SLACK_WEBHOOK: ${{ secrets.VOICE_EVALS_SLACK_WEBHOOK }}
+          DAYS: ${{ github.event.inputs.days || '1' }}
+        run: voice-evals report --days "$DAYS" --slack
+      - name: Weekly review (Mondays)
+        if: github.event_name == 'schedule'
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          VOICE_EVALS_SLACK_WEBHOOK: ${{ secrets.VOICE_EVALS_SLACK_WEBHOOK }}
+        run: |
+          if [ "$(date -u +%u)" = "1" ]; then
+            voice-evals report --days 7 --compare --slack
+          fi

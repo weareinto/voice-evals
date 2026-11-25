@@ -1,0 +1,22 @@
+[project]
+name = "voice-evals"
+version = "0.1.0"
+description = "Voice agent evals with LangSmith and Slack alerts"
+requires-python = ">=3.10"
+dependencies = ["langsmith>=0.4", "requests>=2.31", "pyyaml>=6", "anthropic>=0.60"]
+
+[project.optional-dependencies]
+gemini = ["google-genai>=1.0"]
+
+[project.scripts]
+voice-evals = "voice_evals.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["voice_evals*"]
+
+[tool.setuptools.package-data]
+voice_evals = ["templates/*", "templates/github/*"]

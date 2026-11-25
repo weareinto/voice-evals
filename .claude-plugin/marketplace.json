@@ -1,0 +1,11 @@
+{
+  "name": "into-voice-evals",
+  "owner": { "name": "weareinto" },
+  "plugins": [
+    {
+      "name": "voice-evals",
+      "source": "./",
+      "description": "Voice agent evals with LangSmith + Slack alerts (token-light: a CLI does the work)."
+    }
+  ]
+}
